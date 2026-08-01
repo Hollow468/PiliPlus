@@ -6,7 +6,6 @@ import 'package:PiliPlus/common/widgets/dialog/simple_dialog_option.dart';
 import 'package:PiliPlus/utils/extension/theme_ext.dart';
 import 'package:PiliPlus/utils/storage_utils.dart';
 import 'package:PiliPlus/utils/utils.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show Clipboard;
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
@@ -117,12 +116,13 @@ Future<void> importFromClipBoard<T>(
 Future<void> importFromLocalFile<T>({
   required FutureOr<void> Function(T json) onImport,
 }) async {
-  final result = await FilePicker.pickFile(
-    type: .custom,
+  final files = await StorageUtils.pickFiles(
+    type: StorageFileType.custom,
     allowedExtensions: const ['json', 'txt'],
   );
-  if (result != null) {
-    final data = await result.xFile.readAsString();
+  final file = files?.first;
+  if (file != null) {
+    final data = await file.xFile.readAsString();
     final T json;
     try {
       json = jsonDecode(data);

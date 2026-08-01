@@ -1,4 +1,5 @@
 import 'dart:async' show Timer;
+import 'package:cross_file/cross_file.dart';
 import 'dart:convert' show jsonDecode, utf8;
 import 'dart:io' show Platform, File;
 import 'dart:typed_data' show Uint8List;
@@ -61,7 +62,6 @@ import 'package:canvas_danmaku/canvas_danmaku.dart';
 import 'package:collection/collection.dart';
 import 'package:dio/dio.dart';
 import 'package:easy_debounce/easy_throttle.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart' hide showBottomSheet;
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
@@ -684,17 +684,17 @@ class HeaderControlState extends State<HeaderControl>
                   onTap: () async {
                     Get.back();
                     try {
-                      final result = await FilePicker.pickFile(
-                        type: .custom,
+                      final files = await StorageUtils.pickFiles(
+                        type: StorageFileType.custom,
                         allowedExtensions: const ['json', 'vtt', 'srt', 'ass'],
                       );
-                      if (result != null) {
-                        final file = result.xFile;
+                      final file = files?.first;
+                      if (file != null) {
                         final path = file.path;
                         final name = file.name;
                         final length = videoDetailCtr.subtitles.length;
                         if (name.endsWith('.json')) {
-                          final file = File(path);
+                          final file = File(path!);
                           final stream = file.openRead().transform(
                             utf8.decoder,
                           );
@@ -717,7 +717,7 @@ class HeaderControlState extends State<HeaderControl>
                         } else {
                           videoDetailCtr.vttSubtitles[length] = (
                             isData: false,
-                            id: path,
+                            id: path!,
                           );
                         }
                         videoDetailCtr.subtitles.add(

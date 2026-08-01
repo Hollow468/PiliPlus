@@ -1,3 +1,4 @@
+import 'package:PiliPlus/utils/storage_utils.dart';
 import 'dart:io';
 import 'dart:math' show max;
 
@@ -43,7 +44,6 @@ import 'package:PiliPlus/utils/storage_key.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:PiliPlus/utils/update.dart';
 import 'package:PiliPlus/utils/utils.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart' hide RefreshIndicator;
 import 'package:flutter/services.dart';
@@ -739,7 +739,7 @@ void _showDownPathDialog(BuildContext context, VoidCallback setState) {
         DialogOption(
           onPressed: () async {
             Get.back();
-            final path = await FilePicker.getDirectoryPath();
+            final path = await StorageUtils.getDirectoryPath();
             if (path == null || path == downloadPath) return;
             downloadPath = path;
             setState();

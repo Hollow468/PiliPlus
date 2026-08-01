@@ -14,10 +14,10 @@ import 'package:PiliPlus/utils/path_utils.dart';
 import 'package:PiliPlus/utils/permission_handler.dart';
 import 'package:PiliPlus/utils/platform_utils.dart';
 import 'package:PiliPlus/utils/share_utils.dart';
+import 'package:PiliPlus/utils/storage_utils.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:PiliPlus/utils/utils.dart';
 import 'package:dio/dio.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:live_photo_maker/live_photo_maker.dart';
@@ -129,7 +129,7 @@ abstract final class ImageUtils {
         await saveFileImg(
           filePath: videoPath,
           fileName: videoName,
-          type: FileType.video,
+          type: StorageFileType.video,
           needToast: true,
         );
       }
@@ -270,17 +270,16 @@ abstract final class ImageUtils {
       }
     } else {
       SmartDialog.dismiss();
-      final savePath = await FilePicker.saveFile(
-        type: FileType.image,
-        fileName: fileName,
-        bytes: Uint8List(0),
+      final path = await StorageUtils.saveBytes2File(
+        name: fileName,
+        bytes: bytes,
+        allowedExtensions: const [],
+        type: StorageFileType.image,
       );
-      if (savePath == null) {
+      if (path == null) {
         SmartDialog.showToast("取消保存");
         return null;
       }
-      await File(savePath).writeAsBytes(bytes);
-      SmartDialog.showToast(' 已保存 ');
       res = SaveResult(true, null);
     }
     return res;
@@ -289,7 +288,7 @@ abstract final class ImageUtils {
   static Future<void> saveFileImg({
     required String filePath,
     required String fileName,
-    FileType type = FileType.image,
+    StorageFileType type = StorageFileType.image,
     bool needToast = false,
   }) async {
     final file = File(filePath);
@@ -306,16 +305,17 @@ abstract final class ImageUtils {
         skipIfExists: false,
       );
     } else {
-      final savePath = await FilePicker.saveFile(
-        type: type,
-        fileName: fileName,
+      final path = await StorageUtils.saveBytes2File(
+        name: fileName,
         bytes: Uint8List(0),
+        allowedExtensions: const [],
+        type: type,
       );
-      if (savePath == null) {
+      if (path == null) {
         SmartDialog.showToast("取消保存");
         return;
       }
-      await file.copy(savePath);
+      await file.copy(path);
       res = SaveResult(true, null);
     }
     if (needToast) {
