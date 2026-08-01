@@ -408,6 +408,9 @@ class _SyncPlayRoomSheetState extends State<_SyncPlayRoomSheet> {
     if (_usernameController.text.isEmpty) {
       _usernameController.text = _generateUserName();
     }
+    if (widget.isCreate) {
+      _roomController.text = _createdRoom;
+    }
   }
 
   @override
@@ -425,14 +428,14 @@ class _SyncPlayRoomSheetState extends State<_SyncPlayRoomSheet> {
       return;
     }
     final username = _usernameController.text.trim();
-    final room = widget.isCreate ? _createdRoom : _roomController.text.trim();
+    final room = _roomController.text.trim();
     setState(() => _submitting = true);
     await widget.playerController.createRoom(room, username);
     GStorage.setting.put(SettingBoxKey.syncPlayUserName, username);
     if (!mounted) {
       return;
     }
-    Navigator.of(context).popUntil((route) => route.isFirst);
+    Navigator.of(context).pop();
   }
 
   @override
@@ -450,54 +453,32 @@ class _SyncPlayRoomSheetState extends State<_SyncPlayRoomSheet> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (!widget.isCreate) ...[
-                  TextFormField(
-                    controller: _roomController,
-                    autofocus: true,
-                    keyboardType: TextInputType.number,
-                    textInputAction: TextInputAction.next,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly
-                    ],
-                    autovalidateMode: AutovalidateMode.onUserInteraction,
-                    decoration: const InputDecoration(
-                      labelText: '房间号',
-                      hintText: '6-10 位数字',
-                      prefixIcon: Icon(Icons.meeting_room_outlined),
-                    ),
-                    validator: (value) {
-                      final text = (value ?? '').trim();
-                      if (text.isEmpty) {
-                        return '请输入房间号';
-                      }
-                      if (!RegExp(r'^[0-9]{6,10}$').hasMatch(text)) {
-                        return '房间号为 6-10 位数字';
-                      }
-                      return null;
-                    },
+                TextFormField(
+                  controller: _roomController,
+                  autofocus: !widget.isCreate,
+                  keyboardType: TextInputType.number,
+                  textInputAction: TextInputAction.next,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly
+                  ],
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  decoration: const InputDecoration(
+                    labelText: '房间号',
+                    hintText: '6-10 位数字',
+                    prefixIcon: Icon(Icons.meeting_room_outlined),
                   ),
-                  const SizedBox(height: 14),
-                ],
-                if (widget.isCreate)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.vpn_key_rounded, size: 20),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text('房间号：$_createdRoom',
-                              style: const TextStyle(fontSize: 15)),
-                        ),
-                      ],
-                    ),
-                  ),
-                if (widget.isCreate) const SizedBox(height: 14),
+                  validator: (value) {
+                    final text = (value ?? '').trim();
+                    if (text.isEmpty) {
+                      return '请输入房间号';
+                    }
+                    if (!RegExp(r'^[0-9]{6,10}$').hasMatch(text)) {
+                      return '房间号为 6-10 位数字';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 14),
                 TextFormField(
                   controller: _usernameController,
                   textInputAction: TextInputAction.done,
