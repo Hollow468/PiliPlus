@@ -46,9 +46,11 @@ import 'package:PiliPlus/pages/video/post_panel/view.dart';
 import 'package:PiliPlus/pages/video/send_danmaku/view.dart';
 import 'package:PiliPlus/pages/video/widgets/header_control.dart';
 import 'package:PiliPlus/plugin/pl_player/controller.dart';
+import 'package:PiliPlus/pages/player/controller/player_syncplay_controller.dart';
 import 'package:PiliPlus/plugin/pl_player/models/data_source.dart';
 import 'package:PiliPlus/plugin/pl_player/models/heart_beat_type.dart';
 import 'package:PiliPlus/plugin/pl_player/models/play_status.dart';
+import 'package:PiliPlus/pages/player/syncplay_sheet.dart';
 import 'package:PiliPlus/services/download/download_service.dart';
 import 'package:PiliPlus/utils/accounts.dart';
 import 'package:PiliPlus/utils/connectivity_utils.dart';
@@ -123,6 +125,37 @@ class VideoDetailController extends GetxController
 
   final plPlayerController = PlPlayerController.getInstance()
     ..brightness.value = -1;
+  late final syncplay = PlayerSyncPlayController(
+    bangumiId: () => aid,
+    currentEpisode: () => cid.value,
+    currentRoad: () => 1,
+    playing: () => plPlayerController.playerStatus.isPlaying,
+    currentPosition: () =>
+        plPlayerController.videoPlayerController?.state.position ??
+        Duration.zero,
+    playerPosition: () =>
+        plPlayerController.videoPlayerController?.state.position ??
+        Duration.zero,
+    duration: () => Duration(milliseconds: plPlayerController.durationInMilliseconds),
+    pause: ({bool enableSync = true}) =>
+        plPlayerController.pause(notify: enableSync),
+    play: ({bool enableSync = true}) => plPlayerController.play(),
+    seek: (Duration duration, {bool enableSync = true}) =>
+        plPlayerController.seekTo(duration, isSeek: enableSync),
+    changeEpisode: (episode, {int? currentRoad, int? offset}) async {
+      try {
+        if (isUgc) {
+          await Get.find<UgcIntroController>(tag: heroTag).onChangeEpisode(
+            ugc.BaseEpisodeItem(bvid: bvid, aid: aid, cid: episode),
+          );
+        } else {
+          await Get.find<PgcIntroController>(tag: heroTag).onChangeEpisode(
+            ugc.BaseEpisodeItem(bvid: bvid, aid: aid, cid: episode),
+          );
+        }
+      } catch (_) {}
+    },
+  );
   bool get setSystemBrightness => plPlayerController.setSystemBrightness;
   bool get removeSafeArea => plPlayerController.removeSafeArea;
   double get uiScale => plPlayerController.uiScale;
@@ -385,6 +418,7 @@ class VideoDetailController extends GetxController
       vsync: this,
       initialIndex: Pref.defaultShowComment ? 1 : 0,
     );
+
   }
 
   Future<void> getMediaList({
@@ -1218,8 +1252,29 @@ class VideoDetailController extends GetxController
     }
   }
 
+  Future<void> showSyncPlayPanel(BuildContext context) async {
+    await showSyncPlaySheet(
+      context,
+      playerController: syncplay,
+      changeEpisode: (episode, {int? currentRoad, int? offset}) async {
+        try {
+          if (isUgc) {
+            await Get.find<UgcIntroController>(tag: heroTag).onChangeEpisode(
+              ugc.BaseEpisodeItem(bvid: bvid, aid: aid, cid: episode),
+            );
+          } else {
+            await Get.find<PgcIntroController>(tag: heroTag).onChangeEpisode(
+              ugc.BaseEpisodeItem(bvid: bvid, aid: aid, cid: episode),
+            );
+          }
+        } catch (_) {}
+      },
+    );
+  }
+
   @override
   void onClose() {
+    syncplay.dispose();
     cid.close();
     if (isFileSource) {
       cacheLocalProgress();

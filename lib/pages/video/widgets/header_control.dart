@@ -434,6 +434,15 @@ class HeaderControlState extends State<HeaderControl>
                   leading: const Icon(Icons.hourglass_top_outlined, size: 20),
                   title: const Text('定时关闭', style: titleStyle),
                 ),
+                ListTile(
+                  dense: true,
+                  onTap: () {
+                    Get.back();
+                    videoDetailCtr.showSyncPlayPanel(context);
+                  },
+                  leading: const Icon(Icons.group_outlined, size: 20),
+                  title: const Text('一起看'),
+                ),
                 if (!isFileSource) ...[
                   ListTile(
                     dense: true,

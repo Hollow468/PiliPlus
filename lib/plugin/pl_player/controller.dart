@@ -901,6 +901,22 @@ class PlPlayerController with BlockConfigMixin {
   final Set<ValueChanged<Duration>> _positionListeners = {};
   final Set<ValueChanged<PlayerStatus>> _statusListeners = {};
 
+  void _notifyPositionListeners(Duration position) {
+    for (final listener in _positionListeners) {
+      try {
+        listener(position);
+      } catch (_) {}
+    }
+  }
+
+  void _notifyStatusListeners(PlayerStatus status) {
+    for (final listener in _statusListeners) {
+      try {
+        listener(status);
+      } catch (_) {}
+    }
+  }
+
   /// 播放事件监听
   void _startListeners(NativePlayer player) {
     assert(_subscriptions == null);
@@ -929,9 +945,7 @@ class PlPlayerController with BlockConfigMixin {
           isLive,
         );
 
-        for (final element in _statusListeners) {
-          element(playing ? .playing : .paused);
-        }
+        _notifyStatusListeners(playing ? .playing : .paused);
 
         final seconds = videoPlayerController!.state.position.inSeconds;
         if (seconds != 0) {
@@ -944,9 +958,7 @@ class PlPlayerController with BlockConfigMixin {
         if (completed) {
           playerStatus.value = .completed;
 
-          for (final element in _statusListeners) {
-            element(.completed);
-          }
+          _notifyStatusListeners(.completed);
 
           makeHeartBeat(-1, type: .completed);
         }
@@ -966,9 +978,7 @@ class PlPlayerController with BlockConfigMixin {
           makeHeartBeat(posInSeconds);
         }
 
-        for (final element in _positionListeners) {
-          element(position);
-        }
+        _notifyPositionListeners(position);
       }),
       stream.duration.listen(updateDuration),
       stream.buffer.listen((Duration buffer) {
