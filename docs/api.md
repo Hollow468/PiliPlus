@@ -1,6 +1,6 @@
 # PlayTogether Server API 文档
 
-本文档覆盖当前 MVP 的 HTTP 接口和 WebSocket 紧凑 JSON 协议。
+本文档覆盖当前 MVP 的 HTTP 接口和 WebSocket 紧凑 JSON 协议。完整 OpenAPI 文档见 `docs/openapi.yaml`。
 
 ## 基础约定
 
@@ -28,14 +28,14 @@ Content-Type: application/json
 请求体：
 
 ```json
-{"max_peers": 10}
+{"room_id":"123456","max_peers":10}
 ```
 
 响应 201：
 
 ```json
 {
-  "room_id": "room-xxxx",
+  "room_id": "123456",
   "host_id": "",
   "max_peers": 10
 }
@@ -43,8 +43,17 @@ Content-Type: application/json
 
 说明：
 - 创建后房间内还没有真实 peer
+- `room_id` 为 `6-14` 位数字；若不传则由服务端生成 `6` 位数字房间号
 - 第一个成功 WebSocket `join` 的 peer 自动成为 host
 - 当前 `max_peers` 仅做字段返回，未强制限制
+- 同一个数字房间号不能重复创建，重复创建会返回 `409`
+- 非法房间号会返回 `400`
+
+错误示例：
+
+`400 invalid room id`
+
+`409 room already exists`
 
 ### 获取房间状态
 
@@ -56,7 +65,7 @@ GET /rooms/:room_id/state
 
 ```json
 {
-  "room_id": "room-xxxx",
+  "room_id": "123456",
   "host_id": "p1",
   "peers": {
     "p1": "Alice",
@@ -77,7 +86,6 @@ GET /rooms/:room_id/state
 
 ## WebSocket 消息协议
 
-Flutter 客户端默认对话框地址：`www.rusye.com:8998`
 ### 连接流程
 
 1. 客户端打开 `GET /ws/:room_id`
@@ -117,7 +125,7 @@ Flutter 客户端默认对话框地址：`www.rusye.com:8998`
 ### 服务端 -> 客户端
 
 ```json
-{"t":"init","room":"r1","you":"p1","host":"p1","peers":{"p1":"Alice"},"play":{"s":"paused","pos":0,"by":"","ts":0}}
+{"t":"init","room":"123456","you":"p1","host":"p1","peers":{"p1":"Alice"},"play":{"s":"paused","pos":0,"by":"","ts":0}}
 ```
 
 ```json
@@ -187,6 +195,8 @@ Flutter 客户端默认对话框地址：`www.rusye.com:8998`
 `peer_not_found`
 `not_owner`
 `invalid_message`
+`room_already_exists`
+`invalid_room_id`
 
 ## 状态规则
 
@@ -200,7 +210,7 @@ Flutter 客户端默认对话框地址：`www.rusye.com:8998`
 1. 创建房间
 
 ```bash
-curl -X POST http://localhost:3000/rooms -H 'Content-Type: application/json' -d '{"max_peers":10}'
+curl -X POST http://localhost:3000/rooms -H 'Content-Type: application/json' -d '{"room_id":"123456","max_peers":10}'
 ```
 
 2. WebSocket join

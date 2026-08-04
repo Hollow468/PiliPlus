@@ -1,0 +1,326 @@
+openapi: 3.0.3
+info:
+  title: PlayTogether Server API
+  version: 0.1.0
+  description: Rust + Axum + WebSocket 的“一起看”同步服务端 API。服务器只负责同步状态，不处理后置能力：无账号、无持久化、无媒体托管、无多副本、无端到端加密。
+servers:
+  - url: http://host:3000
+    description: 默认服务地址
+
+paths:
+  /rooms:
+    post:
+      tags:
+        - Room
+      summary: 创建房间
+      description: 创建一个新房间。room_id 为 6-14 位数字；若不传则由服务端生成 6 位数字房间号。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                room_id:
+                  type: string
+                  minLength: 6
+                  maxLength: 14
+                  pattern: '^[0-9]+$'
+                  description: 自定义数字房间号
+                max_peers:
+                  type: integer
+                  format: int64
+                  description: 房间最大人数（当前仅字段返回，未强制限制）
+              examples:
+                custom-room:
+                  summary: 自定义房间号
+                  value:
+                    room_id: "123456"
+                    max_peers: 10
+                auto-room:
+                  summary: 自动生成房间号
+                  value:
+                    max_peers: 10
+      responses:
+        "201":
+          description: 房间创建成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  room_id:
+                    type: string
+                  host_id:
+                    type: string
+                    nullable: true
+                    description: 创建时还没有真实 peer，因此 host_id 为空
+                  max_peers:
+                    type: integer
+                    format: int64
+                    nullable: true
+              example:
+                room_id: "123456"
+                host_id: ""
+                max_peers: 10
+        "400":
+          description: 房间号格式非法
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: invalid room id
+        "409":
+          description: 房间号已存在
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: room already exists
+
+  /rooms/{room_id}/state:
+    get:
+      tags:
+        - Room
+      summary: 获取房间状态
+      parameters:
+        - name: room_id
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 6
+            maxLength: 14
+            pattern: '^[0-9]+$'
+      responses:
+        "200":
+          description: 房间状态
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  room_id:
+                    type: string
+                  host_id:
+                    type: string
+                    nullable: true
+                  peers:
+                    type: object
+                    additionalProperties:
+                      type: string
+                  playback:
+                    type: object
+                    properties:
+                      status:
+                        type: string
+                        enum: [playing, paused]
+                      position_ms:
+                        type: integer
+                        format: int64
+                      updated_at_ms:
+                        type: integer
+                        format: int64
+                      updated_by:
+                        type: string
+                        nullable: true
+              example:
+                room_id: "123456"
+                host_id: "p1"
+                peers:
+                  p1: "Alice"
+                  p2: "Bob"
+                playback:
+                  status: paused
+                  position_ms: 12000
+                  updated_at_ms: 1722837213000
+                  updated_by: "p1"
+        "404":
+          description: 房间不存在
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: room not found
+
+  /ws/{room_id}:
+    get:
+      tags:
+        - WebSocket
+      summary: WebSocket 房间连接
+      description: >-
+        建立到指定房间的 WebSocket 连接。连接后第一个消息必须是 join，
+        否则服务端返回 error 并终止连接流程。
+      parameters:
+        - name: room_id
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 6
+            maxLength: 14
+            pattern: '^[0-9]+$'
+      responses:
+        "101":
+          description: WebSocket 握手成功
+        "200":
+          description: 房间不存在时的错误响应体
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  t:
+                    type: string
+                    example: error
+                  code:
+                    type: string
+                    example: room_not_found
+                  msg:
+                    type: string
+                    example: room not found
+        "400":
+          description: 非法房间号
+        "404":
+          description: 房间不存在
+
+components:
+  schemas:
+    RoomCreateRequest:
+      type: object
+      properties:
+        room_id:
+          type: string
+          minLength: 6
+          maxLength: 14
+          pattern: '^[0-9]+$'
+        max_peers:
+          type: integer
+          format: int64
+      required: []
+
+    RoomState:
+      type: object
+      properties:
+        room_id:
+          type: string
+        host_id:
+          type: string
+          nullable: true
+        peers:
+          type: object
+          additionalProperties:
+            type: string
+        playback:
+          type: object
+          properties:
+            status:
+              type: string
+              enum: [playing, paused]
+            position_ms:
+              type: integer
+              format: int64
+            updated_at_ms:
+              type: integer
+              format: int64
+            updated_by:
+              type: string
+              nullable: true
+
+    WsInit:
+      type: object
+      properties:
+        t:
+          type: string
+          enum: [init]
+        room:
+          type: string
+        you:
+          type: string
+        host:
+          type: string
+        peers:
+          type: object
+          additionalProperties:
+            type: string
+        play:
+          type: object
+          properties:
+            s:
+              type: string
+              enum: [playing, paused]
+            pos:
+              type: integer
+              format: int64
+            by:
+              type: string
+              nullable: true
+            ts:
+              type: integer
+              format: int64
+
+    WsState:
+      type: object
+      properties:
+        t:
+          type: string
+          enum: [state]
+        play:
+          type: object
+          properties:
+            s:
+              type: string
+              enum: [playing, paused]
+            pos:
+              type: integer
+              format: int64
+            by:
+              type: string
+              nullable: true
+            ts:
+              type: integer
+              format: int64
+
+    WsPeerJoined:
+      type: object
+      properties:
+        t:
+          type: string
+          enum: [peer_joined]
+        peer:
+          type: string
+        nick:
+          type: string
+
+    WsPeerLeft:
+      type: object
+      properties:
+        t:
+          type: string
+          enum: [peer_left]
+        peer:
+          type: string
+
+    WsHostChanged:
+      type: object
+      properties:
+        t:
+          type: string
+          enum: [host_changed]
+        host:
+          type: string
+        reason:
+          type: string
+          enum: [transfer, host_disconnect]
+
+    WsError:
+      type: object
+      properties:
+        t:
+          type: string
+          enum: [error]
+        code:
+          type: string
+          enum: [room_not_found, room_full, peer_not_found, not_owner, invalid_message, room_already_exists, invalid_room_id]
+        msg:
+          type: string

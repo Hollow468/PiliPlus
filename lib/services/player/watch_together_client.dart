@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:PiliPlus/services/logger.dart';
 import 'package:PiliPlus/services/player/syncplay_endpoint.dart';
 import 'package:PiliPlus/services/player/watch_together_message.dart';
 
@@ -53,12 +54,21 @@ class WatchTogetherClient {
       Uri.parse('http://${endPoint.host}:${endPoint.port}/rooms'),
     );
     request.headers.contentType = ContentType.json;
-    request.add(utf8.encode('{}'));
+    request.add(utf8.encode(json.encode(<String, dynamic>{
+      'room_id': room,
+      'max_peers': null,
+    })));
     final response = await request.close();
+    final body = await response.transform(utf8.decoder).join();
+    if (response.statusCode == HttpStatus.conflict) {
+      throw const WatchTogetherException('room_already_exists');
+    }
+    if (response.statusCode == HttpStatus.badRequest) {
+      throw const WatchTogetherException('invalid_room_id');
+    }
     if (response.statusCode != HttpStatus.created) {
       throw const WatchTogetherException('room_create_failed');
     }
-    final body = await response.transform(utf8.decoder).join();
     final roomId = _parseRoomId(body) ?? room;
 
     final uri = Uri.parse('ws://${endPoint.host}:${endPoint.port}/ws/$roomId');
@@ -81,6 +91,32 @@ class WatchTogetherClient {
       cancelOnError: false,
     );
 
+    logger.i('一起看: create room=$room ws=$uri send join nick=$username');
+    socket.send(json.encode(ClientMessage.join(nick: username)));
+  }
+
+  Future<void> join() async {
+    final uri = Uri.parse('ws://${endPoint.host}:${endPoint.port}/ws/$room');
+    final socket = await socketFactory(uri, 'watch-together');
+    _socket = socket;
+    _staleTimer?.cancel();
+    _staleTimer = Timer(const Duration(minutes: 5), () {
+      if (isConnected) {
+        unawaited(disconnect());
+      }
+    });
+
+    socket.messages.listen(
+      _controller.add,
+      onDone: () {
+        if (!_controller.isClosed) {
+          _controller.close();
+        }
+      },
+      cancelOnError: false,
+    );
+
+    logger.i('一起看: join room=$room ws=$uri send join nick=$username');
     socket.send(json.encode(ClientMessage.join(nick: username)));
   }
 
@@ -109,6 +145,7 @@ class WatchTogetherClient {
   void sendPlay() => _send(ClientMessage.play());
   void sendPause() => _send(ClientMessage.pause());
   void sendSeek(int positionMs) => _send(ClientMessage.seek(positionMs: positionMs));
+  void sendHostTransfer(String to) => _send(ClientMessage.hostTransfer(to: to));
 
   void _send(Object message) {
     final socket = _socket;
@@ -167,11 +204,16 @@ class _WebSocketSocket implements _WatchTogetherSocket {
 
   @override
   Stream<ServerMessage> get messages {
-    final transformer =
-        StreamTransformer<List<int>, String>.fromBind(utf8.decoder.bind);
     return socket
-        .cast<List<int>>()
-        .transform(transformer)
+        .map((event) {
+          if (event is String) {
+            return event;
+          }
+          if (event is List<int>) {
+            return utf8.decode(event);
+          }
+          throw const WatchTogetherException('invalid_ws_message');
+        })
         .map(json.decode)
         .cast<Map<String, dynamic>>()
         .map(ServerMessage.parse);
@@ -182,10 +224,11 @@ class _WebSocketSocket implements _WatchTogetherSocket {
 
   @override
   Future<void> send(Object message) {
-    final data = message is String
-        ? utf8.encode(message)
-        : message as List<int>;
-    socket.add(data);
+    if (message is String) {
+      socket.add(message);
+    } else {
+      socket.add(message as List<int>);
+    }
     return Future<void>.value();
   }
 

@@ -173,4 +173,7 @@ class ClientMessage {
 
   static Map<String, dynamic> seek({required int positionMs}) =>
       <String, dynamic>{'t': 'seek', 'pos': positionMs};
+
+  static Map<String, dynamic> hostTransfer({required String to}) =>
+      <String, dynamic>{'t': 'host_transfer', 'to': to};
 }

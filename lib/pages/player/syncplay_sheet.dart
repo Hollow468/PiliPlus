@@ -144,14 +144,25 @@ class _SyncPlayDialogState extends State<_SyncPlayDialog> {
             Icon(Icons.meeting_room_rounded,
                 size: 42, color: theme.colorScheme.primary),
             const SizedBox(height: 16),
-            Obx(() {
-              return Text('房间号：${widget.playerController.syncplayRoom.value}',
-                  style: const TextStyle(fontSize: 16));
-            }),
+           Obx(() {
+             return Text('房间号：${widget.playerController.syncplayRoom.value}',
+                 style: const TextStyle(fontSize: 16));
+           }),
             const SizedBox(height: 8),
-            Text('延迟：${widget.playerController.syncplayClientRtt.value} ms',
+            Obx(() {
+              final sessionReady = widget.playerController.sessionReady;
+              if (!sessionReady) {
+                return const Text('');
+              }
+              final isHost = widget.playerController.isHost;
+              return Text(
+                isHost ? '当前身份：房主' : '当前身份：观众',
                 style: TextStyle(
-                    color: theme.colorScheme.onSurfaceVariant, fontSize: 13)),
+                  color: theme.colorScheme.onSurfaceVariant,
+                  fontSize: 13,
+                ),
+              );
+            }),
             const SizedBox(height: 18),
             SizedBox(
               width: double.infinity,
@@ -314,7 +325,7 @@ class _SyncPlayRoomSheet extends StatefulWidget {
 class _SyncPlayRoomSheetState extends State<_SyncPlayRoomSheet> {
   static final Random _random = Random();
   static String _generateRoomNumber() =>
-      List.generate(8, (_) => _random.nextInt(10)).join();
+      List.generate(6, (_) => _random.nextInt(10)).join();
 
   static String _generateUserName() {
     const consonants = 'bcdfghjklmnpqrstvwxyz';
@@ -366,7 +377,11 @@ class _SyncPlayRoomSheetState extends State<_SyncPlayRoomSheet> {
     final username = _usernameController.text.trim();
     final room = _roomController.text.trim();
     setState(() => _submitting = true);
-    await widget.playerController.createRoom(room, username);
+    if (widget.isCreate) {
+      await widget.playerController.createRoom(room, username);
+    } else {
+      await widget.playerController.joinRoom(room, username);
+    }
     GStorage.setting.put(SettingBoxKey.syncPlayUserName, username);
     widget.onFinished();
   }
@@ -385,13 +400,14 @@ class _SyncPlayRoomSheetState extends State<_SyncPlayRoomSheet> {
               autofocus: !widget.isCreate,
               keyboardType: TextInputType.number,
               textInputAction: TextInputAction.next,
-              inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
-              ],
+             inputFormatters: [
+               FilteringTextInputFormatter.digitsOnly,
+             ],
+              maxLength: 14,
               autovalidateMode: AutovalidateMode.onUserInteraction,
               decoration: const InputDecoration(
                 labelText: '房间号',
-                hintText: '6-10 位数字',
+                hintText: '6-14 位数字',
                 prefixIcon: Icon(Icons.meeting_room_outlined),
               ),
               validator: (value) {
@@ -399,8 +415,8 @@ class _SyncPlayRoomSheetState extends State<_SyncPlayRoomSheet> {
                 if (text.isEmpty) {
                   return '请输入房间号';
                 }
-                if (!RegExp(r'^[0-9]{6,10}$').hasMatch(text)) {
-                  return '房间号为 6-10 位数字';
+                if (!RegExp(r'^[0-9]{6,14}$').hasMatch(text)) {
+                  return '房间号为 6-14 位数字';
                 }
                 return null;
               },

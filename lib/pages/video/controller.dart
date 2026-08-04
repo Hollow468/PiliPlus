@@ -38,6 +38,7 @@ import 'package:PiliPlus/pages/common/publish/publish_route.dart';
 import 'package:PiliPlus/pages/search/widgets/search_text.dart';
 import 'package:PiliPlus/pages/sponsor_block/block_mixin.dart';
 import 'package:PiliPlus/pages/video/download_panel/view.dart';
+import 'package:PiliPlus/services/logger.dart';
 import 'package:PiliPlus/pages/video/introduction/pgc/controller.dart';
 import 'package:PiliPlus/pages/video/introduction/ugc/controller.dart';
 import 'package:PiliPlus/pages/video/medialist/view.dart';
@@ -142,6 +143,13 @@ class VideoDetailController extends GetxController
     play: ({bool enableSync = true}) => plPlayerController.play(),
     seek: (Duration duration, {bool enableSync = true}) =>
         plPlayerController.seekTo(duration, isSeek: enableSync),
+    setCurrentPosition: ({double? forceSyncPosition}) {
+      if (forceSyncPosition == null) {
+        return;
+      }
+      final target = Duration(milliseconds: forceSyncPosition.round());
+      unawaited(plPlayerController.seekTo(target, isSeek: false));
+    },
     changeEpisode: (episode, {int? currentRoad, int? offset}) async {
       try {
         if (isUgc) {
@@ -155,8 +163,106 @@ class VideoDetailController extends GetxController
         }
       } catch (_) {}
     },
+    onSessionReady: _bindSyncPlayPlayer,
   );
+
+  StreamSubscription<void>? _syncplayStatusSubscription;
+  StreamSubscription<void>? _syncplayPositionSubscription;
+  Timer? _syncplayPositionTimer;
+  int _syncplayLastSentPositionMs = -1;
+  int _syncplayLastSentPlayPauseAt = 0;
+  bool _syncplayPlayerStable = true;
   bool get setSystemBrightness => plPlayerController.setSystemBrightness;
+  void _sendSyncPlayPause(PlayerStatus status) {
+    if (!syncplay.hasSession) {
+      return;
+    }
+    if (!syncplay.isHost || !syncplay.sessionReady) {
+      return;
+    }
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (_syncplayLastSentPlayPauseAt > 0 && now - _syncplayLastSentPlayPauseAt < 500) {
+      return;
+    }
+    if (status.isPlaying) {
+      syncplay.sendPlay();
+    } else if (status.isPaused || status.isCompleted) {
+      syncplay.sendPause();
+    }
+    _syncplayLastSentPlayPauseAt = now;
+    _syncplayLastSentPositionMs = plPlayerController.positionInMilliseconds;
+  }
+
+  void _sendSyncPosition(int positionMs) {
+    if (!syncplay.hasSession) {
+      return;
+    }
+    if (!syncplay.isHost || !syncplay.sessionReady) {
+      return;
+    }
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final recentlySentPlayPause = _syncplayLastSentPlayPauseAt > 0 && now - _syncplayLastSentPlayPauseAt < 800;
+    if (!_syncplayPlayerStable || recentlySentPlayPause) {
+      return;
+    }
+    if ((positionMs - _syncplayLastSentPositionMs).abs() < 1000) {
+      return;
+    }
+    _syncplayLastSentPositionMs = positionMs;
+    syncplay.sendSeek(positionMs);
+  }
+
+  void _bindSyncPlayPlayer() {
+    _syncplayStatusSubscription?.cancel();
+    _syncplayPositionSubscription?.cancel();
+    _syncplayPositionTimer?.cancel();
+    _syncplayStatusSubscription = null;
+    _syncplayPositionSubscription = null;
+    _syncplayPositionTimer = null;
+    _syncplayLastSentPositionMs = -1;
+    _syncplayLastSentPlayPauseAt = 0;
+    _syncplayPlayerStable = true;
+
+    if (syncplay.isHost && syncplay.sessionReady) {
+      _sendSyncPlayPause(plPlayerController.playerStatus.value);
+      _syncplayLastSentPlayPauseAt = 0;
+      _sendSyncPosition(plPlayerController.positionInMilliseconds);
+    }
+
+    _syncplayStatusSubscription =
+        plPlayerController.playerStatus.listen((status) {
+      logger.i('一起看: local status isHost=${syncplay.isHost} ready=${syncplay.sessionReady} status=${status.name}');
+      final isHost = syncplay.isHost;
+      final ready = syncplay.sessionReady;
+      final remote = syncplay.syncplayClientRtt.value > 0;
+      final shouldApplyRemote = remote && !isHost && ready;
+      if (!shouldApplyRemote) {
+        _sendSyncPlayPause(status);
+        return;
+      }
+      if (!status.isPlaying && syncplay.syncplayRoom.isNotEmpty) {
+        unawaited(plPlayerController.play());
+      } else if (status.isPlaying && syncplay.syncplayRoom.isEmpty) {
+        unawaited(plPlayerController.pause(notify: false));
+      }
+    });
+
+    _syncplayPositionSubscription =
+        plPlayerController.position.listen((position) {
+      logger.i('一起看: local position isHost=${syncplay.isHost} ready=${syncplay.sessionReady} pos=${position * 1000}');
+      final delta = (position * 1000 - plPlayerController.positionInMilliseconds).abs();
+      _syncplayPlayerStable = delta <= 500;
+      _sendSyncPosition(position * 1000);
+    });
+
+    _syncplayPositionTimer?.cancel();
+    _syncplayPositionTimer = Timer.periodic(
+      const Duration(seconds: 2),
+      (_) {
+        _sendSyncPosition(plPlayerController.positionInMilliseconds);
+      },
+    );
+  }
   bool get removeSafeArea => plPlayerController.removeSafeArea;
   double get uiScale => plPlayerController.uiScale;
 
@@ -413,13 +519,27 @@ class VideoDetailController extends GetxController
       getMediaList();
     }
 
-    tabCtr = TabController(
-      length: 2,
-      vsync: this,
-      initialIndex: Pref.defaultShowComment ? 1 : 0,
-    );
+   tabCtr = TabController(
+     length: 2,
+     vsync: this,
+     initialIndex: Pref.defaultShowComment ? 1 : 0,
+   );
 
-  }
+    ever(syncplay.syncplayRoom, (room) {
+      if (room.isEmpty) {
+        _syncplayStatusSubscription?.cancel();
+        _syncplayPositionSubscription?.cancel();
+        _syncplayPositionTimer?.cancel();
+        _syncplayStatusSubscription = null;
+        _syncplayPositionSubscription = null;
+        _syncplayPositionTimer = null;
+        _syncplayLastSentPositionMs = -1;
+      } else {
+        _bindSyncPlayPlayer();
+      }
+    });
+
+ }
 
   Future<void> getMediaList({
     bool isReverse = false,
@@ -1274,6 +1394,12 @@ class VideoDetailController extends GetxController
 
   @override
   void onClose() {
+    _syncplayStatusSubscription?.cancel();
+    _syncplayPositionSubscription?.cancel();
+    _syncplayPositionTimer?.cancel();
+    _syncplayStatusSubscription = null;
+    _syncplayPositionSubscription = null;
+    _syncplayPositionTimer = null;
     syncplay.dispose();
     cid.close();
     if (isFileSource) {
