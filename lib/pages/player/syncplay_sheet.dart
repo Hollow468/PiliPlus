@@ -10,67 +10,33 @@ import 'package:flutter/services.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
 
-enum _SyncPlayDestination { create, join, server }
-
-Future<T?> _showStep<T>(
-    BuildContext context, WidgetBuilder pageBuilder) async {
-  final result = await Navigator.of(context).push<T>(
-    PageRouteBuilder<T>(
-      opaque: false,
-      barrierDismissible: true,
-      barrierColor: Colors.black54,
-      pageBuilder: (context, animation, secondaryAnimation) {
-        return FadeTransition(opacity: animation, child: pageBuilder(context));
-      },
-      transitionDuration: const Duration(milliseconds: 200),
-    ),
-  );
-  return result;
-}
-
 Future<void> showSyncPlaySheet(
   BuildContext context, {
   required PlayerSyncPlayController playerController,
   required Future<void> Function(int episode, {int? currentRoad, int? offset})
       changeEpisode,
 }) async {
-  final destination = await _showStep<_SyncPlayDestination>(
-    context,
-    (context) => _SyncPlayHomeSheet(playerController: playerController),
-  );
-  if (destination == null || !context.mounted) {
-    return;
-  }
-  await _showStep<void>(
-    context,
-    (context) {
-      return switch (destination) {
-        _SyncPlayDestination.create || _SyncPlayDestination.join =>
-          _SyncPlayRoomSheet(
-            isCreate: destination == _SyncPlayDestination.create,
-            playerController: playerController,
-            changeEpisode: changeEpisode,
-          ),
-        _SyncPlayDestination.server => const _SyncPlayServerSheet(),
-      };
+  await showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (BuildContext sheetContext) {
+      return _SyncPlayDialog(playerController: playerController);
     },
   );
 }
 
-class _SyncPlaySheetScaffold extends StatelessWidget {
-  const _SyncPlaySheetScaffold({
-    required this.title,
-    required this.description,
-    required this.primaryAction,
-    required this.bodyBuilder,
-    this.compact = false,
-  });
+class _SyncPlayDialog extends StatefulWidget {
+  const _SyncPlayDialog({required this.playerController});
 
-  final String title;
-  final String description;
-  final Widget? primaryAction;
-  final Widget Function(BuildContext, bool) bodyBuilder;
-  final bool compact;
+  final PlayerSyncPlayController playerController;
+
+  @override
+  State<_SyncPlayDialog> createState() => _SyncPlayDialogState();
+}
+
+class _SyncPlayDialogState extends State<_SyncPlayDialog> {
+  _SyncPlayStep _step = _SyncPlayStep.home;
 
   @override
   Widget build(BuildContext context) {
@@ -81,164 +47,154 @@ class _SyncPlaySheetScaffold extends StatelessWidget {
       ),
       duration: const Duration(milliseconds: 220),
       curve: Curves.easeOut,
-      child: SafeArea(
-        top: false,
-        child: Container(
-          constraints: BoxConstraints(
-            maxWidth: min(420, MediaQuery.of(context).size.width),
-          ),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surface,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(title, style: const TextStyle(fontSize: 18)),
-                          const SizedBox(height: 4),
-                          Text(
-                            description,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
+      child: Container(
+        constraints: BoxConstraints(
+          maxWidth: min(420, MediaQuery.of(context).size.width),
+        ),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(_title, style: const TextStyle(fontSize: 18)),
+                        const SizedBox(height: 4),
+                        Text(
+                          _description,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: theme.colorScheme.onSurfaceVariant,
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                    if (primaryAction != null)
-                      Padding(
-                        padding: const EdgeInsets.only(left: 12),
-                        child: primaryAction!,
-                      ),
-                  ],
-                ),
+                  ),
+                  if (_step != _SyncPlayStep.home)
+                    IconButton(
+                      onPressed: () => setState(() => _step = _SyncPlayStep.home),
+                      icon: const Icon(Icons.close_rounded),
+                      tooltip: '关闭',
+                    ),
+                ],
               ),
-              Divider(height: 1, color: theme.colorScheme.outlineVariant),
-              Flexible(
-                child: bodyBuilder(context, compact),
-              ),
-            ],
-          ),
+            ),
+            Divider(height: 1, color: theme.colorScheme.outlineVariant),
+            _buildBody(context, theme),
+          ],
         ),
       ),
     );
   }
-}
 
-class _SyncPlayHomeSheet extends StatelessWidget {
-  const _SyncPlayHomeSheet({required this.playerController});
+  String get _title {
+    return switch (_step) {
+      _SyncPlayStep.home => '一起看',
+      _SyncPlayStep.create => '创建房间',
+      _SyncPlayStep.join => '加入房间',
+      _SyncPlayStep.server => '同步服务器',
+    };
+  }
 
-  final PlayerSyncPlayController playerController;
+  String get _description {
+    return switch (_step) {
+      _SyncPlayStep.home => '与好友同步播放、暂停与进度',
+      _SyncPlayStep.create => '生成房间号并邀请好友加入',
+      _SyncPlayStep.join => '输入房间号与好友同步播放',
+      _SyncPlayStep.server => '自定义同步服务器地址',
+    };
+  }
 
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return _SyncPlaySheetScaffold(
-      title: '一起看',
-      description: '与好友同步播放、暂停与选集',
-      primaryAction: playerController.hasSession
-          ? FilledButton.tonalIcon(
+  Widget _buildBody(BuildContext context, ThemeData theme) {
+    final connected = widget.playerController.syncplayRoom.isNotEmpty;
+    final connecting = widget.playerController.hasSession && !connected;
+    switch (_step) {
+      case _SyncPlayStep.home:
+        return _buildHome(context, theme, connected: connected, connecting: connecting);
+      case _SyncPlayStep.create:
+        return _buildRoomForm(context, isCreate: true);
+      case _SyncPlayStep.join:
+        return _buildRoomForm(context, isCreate: false);
+      case _SyncPlayStep.server:
+        return const _SyncPlayServerSheet();
+    }
+  }
+
+  Widget _buildHome(
+    BuildContext context,
+    ThemeData theme, {
+    required bool connected,
+    required bool connecting,
+  }) {
+    if (connected) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.meeting_room_rounded,
+                size: 42, color: theme.colorScheme.primary),
+            const SizedBox(height: 16),
+            Obx(() {
+              return Text('房间号：${widget.playerController.syncplayRoom.value}',
+                  style: const TextStyle(fontSize: 16));
+            }),
+            const SizedBox(height: 8),
+            Text('延迟：${widget.playerController.syncplayClientRtt.value} ms',
+                style: TextStyle(
+                    color: theme.colorScheme.onSurfaceVariant, fontSize: 13)),
+            const SizedBox(height: 18),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () async {
+                  await widget.playerController.exitRoom();
+                  if (context.mounted) {
+                    Navigator.of(context).pop();
+                  }
+                },
+                icon: const Icon(Icons.link_off_rounded, size: 18),
+                label: const Text('断开连接'),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    if (connecting) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            Text('正在加入一起看...',
+                style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
+            const SizedBox(height: 12),
+            TextButton.icon(
               onPressed: () async {
-                await playerController.exitRoom();
+                await widget.playerController.exitRoom();
                 if (context.mounted) {
                   Navigator.of(context).pop();
                 }
               },
-              icon: const Icon(Icons.link_off_rounded, size: 18),
-              label: Text(
-                playerController.syncplayRoom.isEmpty
-                    ? '取消连接'
-                    : '断开连接',
-              ),
-            )
-          : null,
-      bodyBuilder: (context, compact) {
-        final connected = playerController.syncplayRoom.isNotEmpty;
-        final connecting = playerController.hasSession && !connected;
-        if (connected) {
-          return _buildConnected(context, theme);
-        }
-        if (connecting) {
-          return _buildConnecting(context, theme);
-        }
-        return _buildLobby(context, theme);
-      },
-    );
-  }
-
-  Widget _buildConnected(BuildContext context, ThemeData theme) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.meeting_room_rounded,
-              size: 42, color: theme.colorScheme.primary),
-          const SizedBox(height: 16),
-          Obx(() {
-            final room = playerController.syncplayRoom.value;
-            final rtt = playerController.syncplayClientRtt.value;
-            return Text('房间号：$room',
-                style: const TextStyle(fontSize: 16));
-          }),
-          const SizedBox(height: 8),
-          Text('延迟：${playerController.syncplayClientRtt.value} ms',
-              style: TextStyle(
-                  color: theme.colorScheme.onSurfaceVariant,
-                  fontSize: 13)),
-          const SizedBox(height: 18),
-          FilledButton.icon(
-            onPressed: () async {
-              await playerController.exitRoom();
-              if (context.mounted) {
-                Navigator.of(context).pop();
-              }
-            },
-            icon: const Icon(Icons.link_off_rounded, size: 18),
-            label: const Text('断开连接'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildConnecting(BuildContext context, ThemeData theme) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const CircularProgressIndicator(),
-          const SizedBox(height: 16),
-          Text('正在加入一起看...',
-              style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
-          const SizedBox(height: 12),
-          TextButton.icon(
-            onPressed: () async {
-              await playerController.exitRoom();
-              if (context.mounted) {
-                Navigator.of(context).pop();
-              }
-            },
-            icon: const Icon(Icons.close_rounded, size: 18),
-            label: const Text('取消连接'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLobby(BuildContext context, ThemeData theme) {
+              icon: const Icon(Icons.close_rounded, size: 18),
+              label: const Text('取消连接'),
+            ),
+          ],
+        ),
+      );
+    }
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
       child: Column(
@@ -248,59 +204,37 @@ class _SyncPlayHomeSheet extends StatelessWidget {
             icon: Icons.add_rounded,
             title: '创建房间',
             description: '生成房间号并邀请好友加入',
-            onTap: () =>
-                Navigator.of(context).pushReplacement(PageRouteBuilder(
-              pageBuilder: (context, animation, secondaryAnimation) {
-                return FadeTransition(
-                  opacity: animation,
-                  child: _SyncPlayRoomSheet(
-                    isCreate: true,
-                    playerController: playerController,
-                    changeEpisode: (_, {int? currentRoad, int? offset}) async {},
-                  ),
-                );
-              },
-              transitionDuration: const Duration(milliseconds: 220),
-            )),
+            onTap: () => setState(() => _step = _SyncPlayStep.create),
           ),
           const SizedBox(height: 10),
           _ActionCard(
             icon: Icons.login_rounded,
             title: '加入房间',
             description: '输入房间号与好友同步播放',
-            onTap: () =>
-                Navigator.of(context).pushReplacement(PageRouteBuilder(
-              pageBuilder: (context, animation, secondaryAnimation) {
-                return FadeTransition(
-                  opacity: animation,
-                  child: _SyncPlayRoomSheet(
-                    isCreate: false,
-                    playerController: playerController,
-                    changeEpisode: (_, {int? currentRoad, int? offset}) async {},
-                  ),
-                );
-              },
-              transitionDuration: const Duration(milliseconds: 220),
-            )),
+            onTap: () => setState(() => _step = _SyncPlayStep.join),
           ),
           const SizedBox(height: 10),
           _ActionCard(
             icon: Icons.dns_rounded,
             title: '同步服务器',
-            description: '切换自定义 SyncPlay 服务器',
-            onTap: () =>
-                Navigator.of(context).pushReplacement(PageRouteBuilder(
-              pageBuilder: (context, animation, secondaryAnimation) {
-                return const FadeTransition(
-                  opacity: AlwaysStoppedAnimation(1),
-                  child: _SyncPlayServerSheet(),
-                );
-              },
-              transitionDuration: const Duration(milliseconds: 220),
-            )),
+            description: '切换自定义同步服务器',
+            onTap: () => setState(() => _step = _SyncPlayStep.server),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildRoomForm(BuildContext context, {required bool isCreate}) {
+    return _SyncPlayRoomSheet(
+      isCreate: isCreate,
+      playerController: widget.playerController,
+      changeEpisode: (_, {int? currentRoad, int? offset}) async {},
+      onFinished: () {
+        if (context.mounted) {
+          Navigator.of(context).pop();
+        }
+      },
     );
   }
 }
@@ -364,12 +298,14 @@ class _SyncPlayRoomSheet extends StatefulWidget {
     required this.isCreate,
     required this.playerController,
     required this.changeEpisode,
+    required this.onFinished,
   });
 
   final bool isCreate;
   final PlayerSyncPlayController playerController;
   final Future<void> Function(int episode, {int? currentRoad, int? offset})
       changeEpisode;
+  final VoidCallback onFinished;
 
   @override
   State<_SyncPlayRoomSheet> createState() => _SyncPlayRoomSheetState();
@@ -432,95 +368,84 @@ class _SyncPlayRoomSheetState extends State<_SyncPlayRoomSheet> {
     setState(() => _submitting = true);
     await widget.playerController.createRoom(room, username);
     GStorage.setting.put(SettingBoxKey.syncPlayUserName, username);
-    if (!mounted) {
-      return;
-    }
-    Navigator.of(context).pop();
+    widget.onFinished();
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return _SyncPlaySheetScaffold(
-      title: widget.isCreate ? '创建房间' : '加入房间',
-      description: '与好友同步播放、暂停与选集',
-      primaryAction: null,
-              bodyBuilder: (context, compact) {
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                  controller: _roomController,
-                  autofocus: !widget.isCreate,
-                  keyboardType: TextInputType.number,
-                  textInputAction: TextInputAction.next,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly
-                  ],
-                  autovalidateMode: AutovalidateMode.onUserInteraction,
-                  decoration: const InputDecoration(
-                    labelText: '房间号',
-                    hintText: '6-10 位数字',
-                    prefixIcon: Icon(Icons.meeting_room_outlined),
-                  ),
-                  validator: (value) {
-                    final text = (value ?? '').trim();
-                    if (text.isEmpty) {
-                      return '请输入房间号';
-                    }
-                    if (!RegExp(r'^[0-9]{6,10}$').hasMatch(text)) {
-                      return '房间号为 6-10 位数字';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 14),
-                TextFormField(
-                  controller: _usernameController,
-                  textInputAction: TextInputAction.done,
-                  autovalidateMode: AutovalidateMode.onUserInteraction,
-                  decoration: const InputDecoration(
-                    labelText: '昵称',
-                    hintText: '4-12 位英文字母，房间内可见',
-                    prefixIcon: Icon(Icons.person_outline_rounded),
-                  ),
-                  validator: (value) {
-                    final text = (value ?? '').trim();
-                    if (text.isEmpty) {
-                      return '请输入昵称';
-                    }
-                    if (!RegExp(r'^[a-zA-Z]{4,12}$').hasMatch(text)) {
-                      return '昵称为 4-12 位英文字母';
-                    }
-                    return null;
-                  },
-                  onFieldSubmitted: (_) => _submit(),
-                ),
-                const SizedBox(height: 18),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    onPressed: _submitting ? null : _submit,
-                    icon: _submitting
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white),
-                          )
-                        : const Icon(Icons.play_arrow_rounded, size: 18),
-                    label: Text(widget.isCreate ? '创建并加入' : '加入房间'),
-                  ),
-                ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+      child: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextFormField(
+              controller: _roomController,
+              autofocus: !widget.isCreate,
+              keyboardType: TextInputType.number,
+              textInputAction: TextInputAction.next,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
               ],
+              autovalidateMode: AutovalidateMode.onUserInteraction,
+              decoration: const InputDecoration(
+                labelText: '房间号',
+                hintText: '6-10 位数字',
+                prefixIcon: Icon(Icons.meeting_room_outlined),
+              ),
+              validator: (value) {
+                final text = (value ?? '').trim();
+                if (text.isEmpty) {
+                  return '请输入房间号';
+                }
+                if (!RegExp(r'^[0-9]{6,10}$').hasMatch(text)) {
+                  return '房间号为 6-10 位数字';
+                }
+                return null;
+              },
             ),
-          ),
-        );
-      },
+            const SizedBox(height: 14),
+            TextFormField(
+              controller: _usernameController,
+              textInputAction: TextInputAction.done,
+              autovalidateMode: AutovalidateMode.onUserInteraction,
+              decoration: const InputDecoration(
+                labelText: '昵称',
+                hintText: '4-12 位英文字母，房间内可见',
+                prefixIcon: Icon(Icons.person_outline_rounded),
+              ),
+              validator: (value) {
+                final text = (value ?? '').trim();
+                if (text.isEmpty) {
+                  return '请输入昵称';
+                }
+                if (!RegExp(r'^[a-zA-Z]{4,12}$').hasMatch(text)) {
+                  return '昵称为 4-12 位英文字母';
+                }
+                return null;
+              },
+              onFieldSubmitted: (_) => _submit(),
+            ),
+            const SizedBox(height: 18),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _submitting ? null : _submit,
+                icon: _submitting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Icon(Icons.play_arrow_rounded, size: 18),
+                label: Text(widget.isCreate ? '创建并加入' : '加入房间'),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -536,45 +461,40 @@ class _SyncPlayServerSheet extends StatelessWidget {
         defaultSyncPlayEndPoint;
     controller.text = current;
 
-    return _SyncPlaySheetScaffold(
-      title: '同步服务器',
-      description: '自定义 SyncPlay 服务器地址',
-      primaryAction: null,
-              bodyBuilder: (context, compact) {
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: controller,
-                textInputAction: TextInputAction.done,
-                decoration: const InputDecoration(
-                  labelText: '服务器地址',
-                  hintText: 'host:port',
-                  prefixIcon: Icon(Icons.dns_rounded),
-                ),
-              ),
-              const SizedBox(height: 14),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: () {
-                    GStorage.setting.put(
-                        SettingBoxKey.syncPlayEndPoint, controller.text);
-                    SmartDialog.showToast('已保存 SyncPlay 服务器地址');
-                    if (context.mounted) {
-                      Navigator.of(context).pop();
-                    }
-                  },
-                  icon: const Icon(Icons.save_rounded, size: 18),
-                  label: const Text('保存'),
-                ),
-              ),
-            ],
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: controller,
+            textInputAction: TextInputAction.done,
+            decoration: const InputDecoration(
+              labelText: '服务器地址',
+              hintText: 'host:port',
+              prefixIcon: Icon(Icons.dns_rounded),
+            ),
           ),
-        );
-      },
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: () {
+                GStorage.setting.put(
+                    SettingBoxKey.syncPlayEndPoint, controller.text);
+                SmartDialog.showToast('已保存同步服务器地址');
+                if (context.mounted) {
+                  Navigator.of(context).pop();
+                }
+              },
+              icon: const Icon(Icons.save_rounded, size: 18),
+              label: const Text('保存'),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
+
+enum _SyncPlayStep { home, create, join, server }
