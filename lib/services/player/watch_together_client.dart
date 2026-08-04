@@ -91,7 +91,6 @@ class WatchTogetherClient {
       cancelOnError: false,
     );
 
-    logger.i('一起看: create room=$room ws=$uri send join nick=$username');
     socket.send(json.encode(ClientMessage.join(nick: username)));
   }
 
@@ -116,7 +115,6 @@ class WatchTogetherClient {
       cancelOnError: false,
     );
 
-    logger.i('一起看: join room=$room ws=$uri send join nick=$username');
     socket.send(json.encode(ClientMessage.join(nick: username)));
   }
 

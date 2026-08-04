@@ -231,7 +231,6 @@ class VideoDetailController extends GetxController
 
     _syncplayStatusSubscription =
         plPlayerController.playerStatus.listen((status) {
-      logger.i('一起看: local status isHost=${syncplay.isHost} ready=${syncplay.sessionReady} status=${status.name}');
       final isHost = syncplay.isHost;
       final ready = syncplay.sessionReady;
       final remote = syncplay.syncplayClientRtt.value > 0;
@@ -249,7 +248,6 @@ class VideoDetailController extends GetxController
 
     _syncplayPositionSubscription =
         plPlayerController.position.listen((position) {
-      logger.i('一起看: local position isHost=${syncplay.isHost} ready=${syncplay.sessionReady} pos=${position * 1000}');
       final delta = (position * 1000 - plPlayerController.positionInMilliseconds).abs();
       _syncplayPlayerStable = delta <= 500;
       _sendSyncPosition(position * 1000);

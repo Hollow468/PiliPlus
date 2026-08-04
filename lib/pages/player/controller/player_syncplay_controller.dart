@@ -252,7 +252,6 @@ class PlayerSyncPlayController extends GetxController {
     if (client == null) {
       throw const WatchTogetherException('session_not_connected');
     }
-    logger.i('一起看: send play room=${syncplayRoom.value}');
     client.sendPlay();
   }
 
@@ -261,7 +260,6 @@ class PlayerSyncPlayController extends GetxController {
     if (client == null) {
       throw const WatchTogetherException('session_not_connected');
     }
-    logger.i('一起看: send pause room=${syncplayRoom.value}');
     client.sendPause();
   }
 
@@ -270,7 +268,6 @@ class PlayerSyncPlayController extends GetxController {
     if (client == null) {
       throw const WatchTogetherException('session_not_connected');
     }
-    logger.i('一起看: send seek room=${syncplayRoom.value} positionMs=$positionMs');
     client.sendSeek(positionMs);
   }
 
@@ -279,7 +276,6 @@ class PlayerSyncPlayController extends GetxController {
     if (client == null) {
       throw const WatchTogetherException('session_not_connected');
     }
-    logger.i('一起看: send host_transfer room=${syncplayRoom.value} to=$to');
     client.sendHostTransfer(to);
   }
 
@@ -338,7 +334,6 @@ class PlayerSyncPlayController extends GetxController {
       SmartDialog.showToast('一起看: ${message.errorMessage}');
     }
     if (!sessionReady && syncplayRoom.value.isNotEmpty) {
-      logger.i('一起看: session not ready room=${syncplayRoom.value} clientId=${syncplayClientId.value}');
     }
   }
 
@@ -352,7 +347,6 @@ class PlayerSyncPlayController extends GetxController {
     }
     final now = DateTime.now().millisecondsSinceEpoch;
     if (isHost && now - _lastApplyPlayStateAt < 1500) {
-      logger.i('一起看: ignore self state room=${syncplayRoom.value} pos=${playSnapshot.positionMs}');
       return;
     }
     logger.i(
