@@ -1,14 +1,8 @@
 import 'dart:io';
 
-const String defaultSyncPlayEndPoint = 'syncplay.pl:8996';
+const String defaultSyncPlayEndPoint = 'www.rusye.com:8998';
 
-const officialSyncPlayEndPoints = <String>{
-  'syncplay.pl:8995',
-  defaultSyncPlayEndPoint,
-  'syncplay.pl:8997',
-  'syncplay.pl:8998',
-  'syncplay.pl:8999',
-};
+const officialSyncPlayEndPoints = <String>{defaultSyncPlayEndPoint};
 
 class SyncPlayEndPoint {
   const SyncPlayEndPoint({required this.host, required this.port});
