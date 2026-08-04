@@ -180,25 +180,25 @@ class PlayerSyncPlayController extends GetxController {
   }
 
   void _applyPlayState(ServerMessage message) {
-    final play = message.play;
-    if (play == null) {
+    final playSnapshot = message.play;
+    if (playSnapshot == null) {
       return;
     }
-    final shouldPlay = play.status == PlayStatus.playing;
-    final target = Duration(milliseconds: play.positionMs);
+    final shouldPlay = playSnapshot.status == PlayStatus.playing;
+    final target = Duration(milliseconds: playSnapshot.positionMs);
     final diff =
         (playerPosition().inMilliseconds - target.inMilliseconds).abs();
     if (diff > 1000 && duration().inMilliseconds > 0) {
       unawaited(seek(target, enableSync: false));
     } else if (shouldPlay != playing()) {
       if (shouldPlay) {
-        unawaited(play(enableSync: false));
+        play(enableSync: false);
       } else {
         unawaited(pause(enableSync: false));
       }
     }
-    syncplayClientRtt.value = play.updatedAtMs == null
+    syncplayClientRtt.value = playSnapshot.updatedAtMs == null
         ? 0
-        : (DateTime.now().millisecondsSinceEpoch - play.updatedAtMs!).abs();
+        : (DateTime.now().millisecondsSinceEpoch - playSnapshot.updatedAtMs!).abs();
   }
 }

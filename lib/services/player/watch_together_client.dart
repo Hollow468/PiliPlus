@@ -55,11 +55,10 @@ class WatchTogetherClient {
     request.headers.contentType = ContentType.json;
     request.add(utf8.encode('{}'));
     final response = await request.close();
-    await response.drain<void>();
     if (response.statusCode != HttpStatus.created) {
       throw const WatchTogetherException('room_create_failed');
     }
-    final body = await utf8.decodeStream(response.stream);
+    final body = await response.transform(utf8.decoder).join();
     final roomId = _parseRoomId(body) ?? room;
 
     final uri = Uri.parse('ws://${endPoint.host}:${endPoint.port}/ws/$roomId');
@@ -86,7 +85,7 @@ class WatchTogetherClient {
   }
 
   Future<void> disconnect() async {
-    await _staleTimer?.cancel();
+    _staleTimer?.cancel();
     _staleTimer = null;
 
     final socket = _socket;
@@ -168,19 +167,27 @@ class _WebSocketSocket implements _WatchTogetherSocket {
 
   @override
   Stream<ServerMessage> get messages {
+    final transformer =
+        StreamTransformer<List<int>, String>.fromBind(utf8.decoder.bind);
     return socket
         .cast<List<int>>()
-        .transform(const Utf8Decoder(allowMalformed: false).bind)
+        .transform(transformer)
         .map(json.decode)
         .cast<Map<String, dynamic>>()
         .map(ServerMessage.parse);
   }
 
   @override
-  Uri get uri => socket.uri;
+  Uri get uri => Uri.parse(socket.toString());
 
   @override
-  Future<void> send(Object message) => socket.add(message as List<int>);
+  Future<void> send(Object message) {
+    final data = message is String
+        ? utf8.encode(message)
+        : message as List<int>;
+    socket.add(data);
+    return Future<void>.value();
+  }
 
   @override
   Future<void> close() => socket.close();
